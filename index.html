@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bangladesh Vegetation and Weather Dashboard</title>
+  <title>Bangladesh Environmental Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -22,48 +22,139 @@
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(false);
       const [searchQuery, setSearchQuery] = useState('');
-      const [error, setError] = useState(null);
+      const [errors, setErrors] = useState([]);
 
-      // Simulated NDVI data (replace with Google Earth Engine in production)
-      const getNDVI = (lat, lng) => ({
+      // Simulated NDVI and flood data (replace with Google Earth Engine/GFMS in production)
+      const getNDVI = () => ({
         ndvi: (Math.random() * (0.9 - 0.1) + 0.1).toFixed(2),
         vegetationHealth: Math.random() > 0.5 ? 'Healthy' : 'Stressed',
       });
 
-      // Fetch weather data from Open-Meteo
-      const fetchWeatherData = async (lat, lng) => {
-        try {
-          const response = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
-          );
-          if (!response.ok) throw new Error('Weather API error');
-          const weather = await response.json();
-          return {
-            temperature: weather.current.temperature_2m,
-            humidity: weather.current.relative_humidity_2m,
-            windSpeed: weather.current.wind_speed_10m,
-          };
-        } catch (err) {
-          throw new Error('Failed to fetch weather data');
+      const getFloodData = () => ({
+        floodRisk: Math.random() > 0.7 ? 'High' : Math.random() > 0.3 ? 'Moderate' : 'Low',
+      });
+
+      // Retry logic for API calls
+      const fetchWithRetry = async (url, retries = 3, delay = 1000) => {
+        for (let i = 0; i < retries; i++) {
+          try {
+            const response = await fetch(url, { headers: { 'User-Agent': 'BangladeshDashboard/1.0' } });
+            if (response.ok) return await response.json();
+            throw new Error(`HTTP ${response.status}`);
+          } catch (err) {
+            if (i === retries - 1) throw err;
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
       };
 
-      // Fetch combined data (weather + NDVI)
+      // Fetch weather data from Open-Meteo
+      const fetchWeatherData = async (lat, lng) => {
+        try {
+          const data = await fetchWithRetry(
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation`
+          );
+          return {
+            temperature: data.current.temperature_2m,
+            humidity: data.current.relative_humidity_2m,
+            windSpeed: data.current.wind_speed_10m,
+            precipitation: data.current.precipitation,
+          };
+        } catch (err) {
+          setErrors(prev => [...prev, 'Weather: Failed to fetch']);
+          return { error: 'Weather data unavailable' };
+        }
+      };
+
+      // Fetch air quality from AQICN (replace 'YOUR_AQICN_TOKEN' with actual token)
+      const fetchAirQualityData = async (lat, lng) => {
+        try {
+          const response = await fetch(
+            `https://api.waqi.info/feed/geo:${lat};${lng}/?token=YOUR_AQICN_TOKEN`
+          );
+          if (!response.ok) throw new Error('Air Quality API error');
+          const airQuality = await response.json();
+          if (airQuality.status !== 'ok') {
+            return { error: 'No air quality data nearby' };
+          }
+          return {
+            aqi: airQuality.data.aqi || 'N/A',
+            pm25: airQuality.data.iaqi.pm25?.v || 'N/A',
+          };
+        } catch (err) {
+          setErrors(prev => [...prev, 'Air Quality: Failed to fetch']);
+          return { error: 'Air quality data unavailable' };
+        }
+      };
+
+      // Fetch soil moisture from Copernicus CDS (simulated; requires backend in production)
+      const fetchSoilMoistureData = async (lat, lng) => {
+        // Note: CDS requires server-side Python client (cdsapi). Simulate for now.
+        try {
+          // Placeholder: In production, query ERA5-Land via CDS API
+          return { soilMoisture: (Math.random() * 0.5).toFixed(2) }; // Mock 0–0.5 m³/m³
+        } catch (err) {
+          setErrors(prev => [...prev, 'Soil Moisture: Failed to fetch']);
+          return { error: 'Soil moisture data unavailable' };
+        }
+      };
+
+      // Fetch population from GeoNames (replace 'YOUR_GEONAMES_USERNAME' with actual username)
+      const fetchPopulationData = async (lat, lng) => {
+        try {
+          const data = await fetchWithRetry(
+            `http://api.geonames.org/findNearbyPlaceNameJSON?lat=${lat}&lng=${lng}&radius=10&username=YOUR_GEONAMES_USERNAME`
+          );
+          if (!data.geonames || data.geonames.length === 0) {
+            return { error: 'No population data nearby' };
+          }
+          return { population: data.geonames[0].population || 'N/A' };
+        } catch (err) {
+          setErrors(prev => [...prev, 'Population: Failed to fetch']);
+          return { error: 'Population data unavailable' };
+        }
+      };
+
+      // Fetch land cover from Dynamic World (simulated; requires Google Earth Engine)
+      const fetchLandCoverData = async (lat, lng) => {
+        // Note: Dynamic World requires EE authentication. Simulate for now.
+        try {
+          const landTypes = ['Forest', 'Cropland', 'Urban', 'Water', 'Grassland'];
+          return { landCover: landTypes[Math.floor(Math.random() * landTypes.length)] };
+        } catch (err) {
+          setErrors(prev => [...prev, 'Land Cover: Failed to fetch']);
+          return { error: 'Land cover data unavailable' };
+        }
+      };
+
+      // Fetch all data
       const fetchData = async (lat, lng) => {
         setLoading(true);
-        setError(null);
+        setErrors([]);
         try {
-          const weatherData = await fetchWeatherData(lat, lng);
-          const ndviData = getNDVI(lat, lng);
+          const [weatherData, airQualityData, soilMoistureData, populationData, landCoverData] = await Promise.all([
+            fetchWeatherData(lat, lng),
+            fetchAirQualityData(lat, lng),
+            fetchSoilMoistureData(lat, lng),
+            fetchPopulationData(lat, lng),
+            fetchLandCoverData(lat, lng),
+          ]);
+          const ndviData = getNDVI();
+          const floodData = getFloodData();
           setData({
             lat: lat.toFixed(4),
             lng: lng.toFixed(4),
             date: new Date().toISOString().split('T')[0],
             ...weatherData,
+            ...airQualityData,
+            ...soilMoistureData,
+            ...populationData,
+            ...landCoverData,
             ...ndviData,
+            ...floodData,
           });
         } catch (err) {
-          setError(err.message);
+          setErrors(prev => [...prev, 'General: Failed to fetch data']);
         } finally {
           setLoading(false);
         }
@@ -74,15 +165,13 @@
         e.preventDefault();
         if (!searchQuery) return;
         setLoading(true);
-        setError(null);
+        setErrors([]);
         try {
-          const response = await fetch(
+          const data = await fetchWithRetry(
             `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=bd&limit=1`
           );
-          if (!response.ok) throw new Error('Geocoding API error');
-          const results = await response.json();
-          if (results.length === 0) throw new Error('No results found');
-          const { lat, lon } = results[0];
+          if (data.length === 0) throw new Error('No results found');
+          const { lat, lon } = data[0];
           const latitude = parseFloat(lat);
           const longitude = parseFloat(lon);
           if (marker) map.removeLayer(marker);
@@ -91,7 +180,7 @@
           map.setView([latitude, longitude], 10);
           await fetchData(latitude, longitude);
         } catch (err) {
-          setError(err.message);
+          setErrors(prev => [...prev, `Search: ${err.message}`]);
         } finally {
           setLoading(false);
         }
@@ -99,12 +188,11 @@
 
       // Initialize map
       useEffect(() => {
-        const leafletMap = L.map('map').setView([23.685, 90.3563], 7); // Center on Bangladesh
+        const leafletMap = L.map('map').setView([23.685, 90.3563], 7);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(leafletMap);
 
-        // Click event to pin location
         leafletMap.on('click', (e) => {
           const { lat, lng } = e.latlng;
           if (marker) leafletMap.removeLayer(marker);
@@ -119,8 +207,7 @@
 
       return (
         <div className="container mx-auto p-4 h-screen flex flex-col">
-          <h1 className="text-2xl font-bold mb-4">Bangladesh Vegetation & Weather Dashboard</h1>
-          {/* Search Bar */}
+          <h1 className="text-2xl font-bold mb-4">Bangladesh Environmental Dashboard</h1>
           <form onSubmit={handleSearch} className="mb-4">
             <div className="flex gap-2">
               <input
@@ -140,14 +227,16 @@
             </div>
           </form>
           <div className="flex flex-1 gap-4">
-            {/* Map Section */}
             <div className="w-2/3">
               <div id="map" className="h-full rounded-lg shadow"></div>
             </div>
-            {/* Data Sidebar */}
-            <div className="w-1/3 bg-gray-100 p-4 rounded-lg shadow">
+            <div className="w-1/3 bg-gray-100 p-4 rounded-lg shadow overflow-y-auto">
               <h2 className="text-xl font-semibold mb-2">Location Data</h2>
-              {error && <p className="text-red-500">{error}</p>}
+              {errors.length > 0 && (
+                <div className="text-red-500 mb-2">
+                  {errors.map((err, i) => <p key={i}>{err}</p>)}
+                </div>
+              )}
               {loading ? (
                 <p>Loading data...</p>
               ) : data ? (
@@ -155,9 +244,46 @@
                   <p><strong>Location:</strong> ({data.lat}, {data.lng})</p>
                   <p><strong>Date:</strong> {data.date}</p>
                   <h3 className="font-semibold mt-2">Weather</h3>
-                  <p><strong>Temperature:</strong> {data.temperature}°C</p>
-                  <p><strong>Humidity:</strong> {data.humidity}%</p>
-                  <p><strong>Wind Speed:</strong> {data.windSpeed} km/h</p>
+                  {data.weatherError ? (
+                    <p>{data.weatherError}</p>
+                  ) : (
+                    <>
+                      <p><strong>Temperature:</strong> {data.temperature}°C</p>
+                      <p><strong>Humidity:</strong> {data.humidity}%</p>
+                      <p><strong>Wind Speed:</strong> {data.windSpeed} km/h</p>
+                      <p><strong>Precipitation:</strong> {data.precipitation} mm</p>
+                    </>
+                  )}
+                  <h3 className="font-semibold mt-2">Air Quality</h3>
+                  {data.airQualityError ? (
+                    <p>{data.airQualityError}</p>
+                  ) : (
+                    <>
+                      <p><strong>AQI:</strong> {data.aqi}</p>
+                      <p><strong>PM2.5:</strong> {data.pm25} µg/m³</p>
+                    </>
+                  )}
+                  <h3 className="font-semibold mt-2">Soil Moisture</h3>
+                  {data.soilMoistureError ? (
+                    <p>{data.soilMoistureError}</p>
+                  ) : (
+                    <p><strong>Volumetric Moisture:</strong> {data.soilMoisture} m³/m³</p>
+                  )}
+                  <h3 className="font-semibold mt-2">Population</h3>
+                  {data.populationError ? (
+                    <p>{data.populationError}</p>
+                  ) : (
+                    <p><strong>Population:</strong> {data.population} people</p>
+                  )}
+                  <h3 className="font-semibold mt-2">Land Cover</h3>
+                  {data.landCoverError ? (
+                    <p>{data.landCoverError}</p>
+                  ) : (
+                    <p><strong>Type:</strong> {data.landCover}</p>
+                  )}
+                  <h3 className="font-semibold mt-2">Flood Risk</h3>
+                  <p><strong>Level:</strong> {data.floodRisk}</p>
+とき
                   <h3 className="font-semibold mt-2">Vegetation</h3>
                   <p><strong>NDVI:</strong> {data.ndvi}</p>
                   <p><strong>Vegetation Health:</strong> {data.vegetationHealth}</p>
@@ -169,7 +295,7 @@
                   </button>
                 </div>
               ) : (
-                <p>Search or click on the map to view weather and vegetation data.</p>
+                <p>Search or click on the map to view environmental data.</p>
               )}
             </div>
           </div>
