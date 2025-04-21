@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bangladesh Vegetation and Weather Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const Dashboard = () => {
+      const [map, setMap] = useState(null);
+      const [marker, setMarker] = useState(null);
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [error, setError] = useState(null);
+
+      // Simulated NDVI data (replace with Google Earth Engine in production)
+      const getNDVI = (lat, lng) => ({
+        ndvi: (Math.random() * (0.9 - 0.1) + 0.1).toFixed(2),
+        vegetationHealth: Math.random() > 0.5 ? 'Healthy' : 'Stressed',
+      });
+
+      // Fetch weather data from Open-Meteo
+      const fetchWeatherData = async (lat, lng) => {
+        try {
+          const response = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`
+          );
+          if (!response.ok) throw new Error('Weather API error');
+          const weather = await response.json();
+          return {
+            temperature: weather.current.temperature_2m,
+            humidity: weather.current.relative_humidity_2m,
+            windSpeed: weather.current.wind_speed_10m,
+          };
+        } catch (err) {
+          throw new Error('Failed to fetch weather data');
+        }
+      };
+
+      // Fetch combined data (weather + NDVI)
+      const fetchData = async (lat, lng) => {
+        setLoading(true);
+        setError(null);
+        try {
+          const weatherData = await fetchWeatherData(lat, lng);
+          const ndviData = getNDVI(lat, lng);
+          setData({
+            lat: lat.toFixed(4),
+            lng: lng.toFixed(4),
+            date: new Date().toISOString().split('T')[0],
+            ...weatherData,
+            ...ndviData,
+          });
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // Search for a place in Bangladesh using Nominatim
+      const handleSearch = async (e) => {
+        e.preventDefault();
+        if (!searchQuery) return;
+        setLoading(true);
+        setError(null);
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=bd&limit=1`
+          );
+          if (!response.ok) throw new Error('Geocoding API error');
+          const results = await response.json();
+          if (results.length === 0) throw new Error('No results found');
+          const { lat, lon } = results[0];
+          const latitude = parseFloat(lat);
+          const longitude = parseFloat(lon);
+          if (marker) map.removeLayer(marker);
+          const newMarker = L.marker([latitude, longitude]).addTo(map);
+          setMarker(newMarker);
+          map.setView([latitude, longitude], 10);
+          await fetchData(latitude, longitude);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // Initialize map
+      useEffect(() => {
+        const leafletMap = L.map('map').setView([23.685, 90.3563], 7); // Center on Bangladesh
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(leafletMap);
+
+        // Click event to pin location
+        leafletMap.on('click', (e) => {
+          const { lat, lng } = e.latlng;
+          if (marker) leafletMap.removeLayer(marker);
+          const newMarker = L.marker([lat, lng]).addTo(leafletMap);
+          setMarker(newMarker);
+          fetchData(lat, lng);
+        });
+
+        setMap(leafletMap);
+        return () => leafletMap.remove();
+      }, []);
+
+      return (
+        <div className="container mx-auto p-4 h-screen flex flex-col">
+          <h1 className="text-2xl font-bold mb-4">Bangladesh Vegetation & Weather Dashboard</h1>
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="mb-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for a place in Bangladesh (e.g., Dhaka)"
+                className="flex-1 p-2 border rounded"
+              />
+              <button
+                type="submit"
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                disabled={loading}
+              >
+                Search
+              </button>
+            </div>
+          </form>
+          <div className="flex flex-1 gap-4">
+            {/* Map Section */}
+            <div className="w-2/3">
+              <div id="map" className="h-full rounded-lg shadow"></div>
+            </div>
+            {/* Data Sidebar */}
+            <div className="w-1/3 bg-gray-100 p-4 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-2">Location Data</h2>
+              {error && <p className="text-red-500">{error}</p>}
+              {loading ? (
+                <p>Loading data...</p>
+              ) : data ? (
+                <div>
+                  <p><strong>Location:</strong> ({data.lat}, {data.lng})</p>
+                  <p><strong>Date:</strong> {data.date}</p>
+                  <h3 className="font-semibold mt-2">Weather</h3>
+                  <p><strong>Temperature:</strong> {data.temperature}°C</p>
+                  <p><strong>Humidity:</strong> {data.humidity}%</p>
+                  <p><strong>Wind Speed:</strong> {data.windSpeed} km/h</p>
+                  <h3 className="font-semibold mt-2">Vegetation</h3>
+                  <p><strong>NDVI:</strong> {data.ndvi}</p>
+                  <p><strong>Vegetation Health:</strong> {data.vegetationHealth}</p>
+                  <button
+                    className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                    onClick={() => setData(null)}
+                  >
+                    Clear Data
+                  </button>
+                </div>
+              ) : (
+                <p>Search or click on the map to view weather and vegetation data.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<Dashboard />, document.getElementById('root'));
+  </script>
+</body>
+</html>
