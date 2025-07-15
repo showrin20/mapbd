@@ -82,3 +82,193 @@
 | 🔥 Heatmap       | Use prediction confidence to render in Leaflet      |
 
 ✅ **Deliverable**: Smart ML-driven frontend, alerting, chart overlays
+
+
+## 🧠 Project Name:
+
+**EnviroCast: AI-Powered Environmental Monitoring & Model Comparison Dashboard for Dhaka**
+
+---
+
+## 🎯 Final Output Summary:
+
+* Cleaned datasets (AQI + weather)
+* 6 trained models (LSTM, Prophet, RF, XGBoost, Isolation Forest, AutoEncoder)
+* FastAPI backend (`/predict`, `/classify`, `/explain`, `/drift-check`, `/compare`)
+* Dashboard (Tailwind + Leaflet + Chart.js) with:
+
+  * Forecasts
+  * Classification
+  * Anomaly detection
+  * Drift alerts
+  * SHAP explanations
+  * 📊 Bar + Pie Charts for model comparisons
+* `README.md` + system docs
+
+---
+
+## 🧩 Dataset Links
+
+| Name                                    | Description                                                                     | Kaggle Link                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **Air Quality Data Set for Dhaka City** | Daily AQI, PM2.5, coordinates (used for forecasting, classification, anomalies) | [🔗 Link](https://www.kaggle.com/datasets/mahdilu/air-quality-dataset-for-dhaka-city) |
+| **Weather Data in Dhaka (2008–2018)**   | Temp, humidity, wind speed — used for correlation & drift detection             | [🔗 Link](https://www.kaggle.com/datasets/ashrafulhaque/weather-data-in-dhaka-city)   |
+
+---
+
+## ⚙️ Tech Stack
+
+* **Backend**: Python (FastAPI, MLflow, Evidently)
+* **Frontend**: HTML + TailwindCSS + Chart.js + Leaflet.js
+* **ML Libraries**: scikit-learn, XGBoost, TensorFlow/Keras, Prophet, SHAP, DVC (optional)
+* **Visualization**: SHAP plots, Chart.js
+* **Deployment (optional)**: Render / HuggingFace Spaces / Docker
+
+---
+
+## 🗓️ ADHD-Friendly 3-Day Plan (\~16–18 hrs)
+
+---
+
+### 🚀 **Day 1: Dataset Cleaning & Model Training** (\~6h)
+
+#### ✅ Task 1: Clean AQI Dataset (1.5h)
+
+* Load CSV
+* Drop missing/nulls
+* Normalize PM2.5
+* Label AQI: Safe (<50), Moderate (50–150), Danger (>150)
+* Save as `aqi_cleaned.csv`
+
+#### ✅ Task 2: Forecasting – LSTM vs Prophet (2h)
+
+* LSTM:
+
+  * Seq2Seq (past 24h ➜ next 24h AQI)
+  * Normalize series, reshape to \[samples, timesteps, features]
+* Prophet:
+
+  * Fit `ds` (timestamp) + `y` (AQI)
+* Compare MAE on test split
+
+#### ✅ Task 3: Classification & Anomaly Models (1.5h)
+
+* RF + XGBoost → Label prediction
+
+  * Input: AQI, PM2.5
+  * Output: Safe/Moderate/Danger
+  * Metric: Accuracy, F1
+* Isolation Forest + AutoEncoder → Anomalies (PM2.5 > 200)
+
+  * Metric: Precision, recall
+* Save models as `.pkl`
+
+#### ✅ Task 4: Drift Detection Baseline (1h)
+
+* Evidently:
+
+  * Calculate mean, std, quantiles
+  * Save as JSON baseline
+
+#### 🧾 Deliverables:
+
+* `aqi_cleaned.csv`
+* 6 models
+* MAE, accuracy, F1, precision, recall
+* Drift baseline `.json`
+
+---
+
+### 🧪 **Day 2: XAI, Few-Shot Learning, API** (\~6h)
+
+#### ✅ Task 1: Correlate Weather Data (1.5h)
+
+* Join `aqi_cleaned.csv` + Weather data on timestamp
+* Compute Pearson correlation: AQI vs. temp, humidity
+* Save `merged.csv`
+
+#### ✅ Task 2: Few-Shot Learning (1.5h)
+
+* Manually label 20 new points
+* Fine-tune RandomForest with `PEFT` concept (simulate few-shot)
+* Compare before/after F1
+
+#### ✅ Task 3: SHAP XAI (1.5h)
+
+* Use `TreeExplainer` on RandomForest
+* Visual: Force plots, bar plots
+* Save SHAP values as `.json`, images as `.png`
+
+#### ✅ Task 4: FastAPI Setup (1.5h)
+
+* `/predict` – AQI forecast (LSTM, Prophet)
+* `/classify` – Classifier output
+* `/explain` – SHAP json/plots
+* `/drift-check` – PM2.5 drift warning
+* `/compare` – Model metrics JSON
+
+#### 🧾 Deliverables:
+
+* `merged.csv`
+* SHAP files
+* Fine-tuned model
+* FastAPI with 5 working endpoints
+
+---
+
+### 📊 **Day 3: Dashboard + Graphs + Final Polish** (\~5–6h)
+
+#### ✅ Task 1: Chart.js Model Graphs (1.5h)
+
+* Fetch from `/compare`
+* Bar Chart: LSTM vs Prophet (MAE)
+* Bar Chart: RF vs XGBoost (Acc, F1)
+* Pie: Isolation Forest vs AutoEncoder (Precision)
+
+#### ✅ Task 2: Full Dashboard Integration (1.5h)
+
+* Prediction card: “Next AQI: 175 🔴 Danger”
+* Map with Leaflet (flag anomalies)
+* SHAP: “PM2.5=185 → AQI 175”
+* Model comparison section (graphs)
+* Drift alerts
+
+#### ✅ Task 3: Backend Finalization & Drift Logic (1.5h)
+
+* Add drift threshold logic (Evidently)
+* Alert if PM2.5 shifts >20%
+* Log API calls
+
+#### ✅ Task 4: Testing + README (0.5h)
+
+* Manual tests (API, frontend, graphs)
+* Write `README.md` with:
+
+  * Dataset links
+  * Model details
+  * How to run API
+  * Graph explanation
+
+#### 🧾 Final Deliverables:
+
+* Dashboard HTML/CSS/JS (Chart.js)
+* API backend (FastAPI)
+* SHAP plots, prediction cards
+* Drift alert engine
+* `README.md`
+
+---
+
+## 🧠 Bonus: Real-World Use Case & CV Boost
+
+| Aspect                       | Value                                                        |
+| ---------------------------- | ------------------------------------------------------------ |
+| 📍 **City**                  | Dhaka, Bangladesh                                            |
+| 🧪 **Use Case**              | Pollution prediction, early anomaly detection                |
+| 🔍 **XAI**                   | SHAP explains predictions (trust + accountability)           |
+| ⚡ **Few-Shot + Drift**       | Adapts to new data, real-world deployable                    |
+| 📊 **Graphs**                | Transparent model performance comparisons                    |
+
+---
+
+
